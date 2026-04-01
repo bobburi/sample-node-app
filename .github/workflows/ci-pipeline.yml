@@ -12,6 +12,7 @@ env:
   IMAGE_NAME: nodejs-app
   GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
   GKE_REGION: ${{ secrets.GKE_REGION }}
+  GKE_ZONE: ${{ secrets.GKE_ZONE }}
 
 jobs:
 # ======================
@@ -73,7 +74,7 @@ jobs:
     - name: Get GKE Credentials
       run: |
         gcloud container clusters get-credentials $GKE_CLUSTER \
-          --region $GKE_REGION \
+          --zone $GKE_ZONE \
           --project $PROJECT_ID
 
     - name: Update Image in Deployment
