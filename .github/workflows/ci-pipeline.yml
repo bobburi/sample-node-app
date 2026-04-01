@@ -1,4 +1,4 @@
-name: sample-app-ci-pipeline
+name: sample-app-ci-cd-pipeline
 
 on:
   push:
@@ -10,14 +10,23 @@ env:
   REGION: ${{ secrets.GCP_REGION }}
   REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
   IMAGE_NAME: nodejs-app
+  GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
+  GKE_REGION: ${{ secrets.GKE_REGION }}
 
 jobs:
-  build-and-push:
+# ======================
+# CI STAGE
+# ======================
+  ci-build-push:
+    name: CI - Build & Push Image
     runs-on: ubuntu-latest
+
+    outputs:
+      image: ${{ steps.image.outputs.image }}
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Authenticate to GCP
       uses: google-github-actions/auth@v2
@@ -32,11 +41,47 @@ jobs:
       run: |
         docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA .
 
-    - name: Push Docker Image to GAR
+    - name: Push Docker Image
       run: |
         docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA
 
-    - name: Output Image URL
+    - name: Export Image URL
+      id: image
       run: |
-        echo "Image pushed:"
-        echo "$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA"
+        echo "image=$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA" >> $GITHUB_OUTPUT
+
+# ======================
+# CD STAGE
+# ======================
+  cd-deploy:
+    name: CD - Deploy to GKE
+    needs: ci-build-push
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Authenticate to GCP
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up gcloud
+      uses: google-github-actions/setup-gcloud@v2
+
+    - name: Get GKE Credentials
+      run: |
+        gcloud container clusters get-credentials $GKE_CLUSTER \
+          --region $GKE_REGION \
+          --project $PROJECT_ID
+
+    - name: Update Image in Deployment
+      run: |
+        sed -i "s|IMAGE_PLACEHOLDER|${{ needs.ci-build-push.outputs.image }}|g" k8s/deployment.yaml
+
+    - name: Deploy to GKE
+      run: |
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml
+        kubectl apply -f k8s/ingress.yaml
