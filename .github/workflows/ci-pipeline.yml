@@ -11,7 +11,6 @@ env:
   REPOSITORY: ${{ secrets.GAR_REPOSITORY }}
   IMAGE_NAME: nodejs-app
   GKE_CLUSTER: ${{ secrets.GKE_CLUSTER }}
-  GKE_REGION: ${{ secrets.GKE_REGION }}
   GKE_ZONE: ${{ secrets.GKE_ZONE }}
 
 jobs:
@@ -26,65 +25,65 @@ jobs:
       image: ${{ steps.image.outputs.image }}
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-    - name: Authenticate to GCP
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Configure Docker for GAR
-      run: |
-        gcloud auth configure-docker $REGION-docker.pkg.dev
+      - name: Configure Docker for GAR
+        run: |
+          gcloud auth configure-docker $REGION-docker.pkg.dev
 
-    - name: Build Docker Image
-      run: |
-        docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA .
+      - name: Build Docker Image
+        run: |
+          docker build -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA .
 
-    - name: Push Docker Image
-      run: |
-        docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA
+      - name: Push Docker Image
+        run: |
+          docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA
 
-    - name: Export Image URL
-      id: image
-      run: |
-        echo "image=$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA" >> $GITHUB_OUTPUT
+      - name: Export Image URL
+        id: image
+        run: |
+          echo "image=$REGION-docker.pkg.dev/$PROJECT_ID/$REPOSITORY/$IMAGE_NAME:$GITHUB_SHA" >> $GITHUB_OUTPUT
 
 # ======================
 # CD STAGE
 # ======================
   cd-deploy:
-  name: CD - Deploy to GKE
-  needs: ci-build-push
-  runs-on: ubuntu-latest
+    name: CD - Deploy to GKE
+    needs: ci-build-push
+    runs-on: ubuntu-latest
 
-  steps:
-  - name: Checkout Code
-    uses: actions/checkout@v4
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-  - name: Authenticate to GCP
-    uses: google-github-actions/auth@v2
-    with:
-      credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-  - name: Set up gcloud
-    uses: google-github-actions/setup-gcloud@v2
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
-  - name: Get GKE credentials
-    uses: google-github-actions/get-gke-credentials@v2
-    with:
-      cluster_name: ${{ env.GKE_CLUSTER }}
-      location: ${{ env.GKE_ZONE }}
-      project_id: ${{ env.PROJECT_ID }}
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.GKE_CLUSTER }}
+          location: ${{ env.GKE_ZONE }}
+          project_id: ${{ env.PROJECT_ID }}
 
-  - name: Deploy manifests
-    run: |
-      kubectl apply -f k8s/deployment.yaml
-      kubectl apply -f k8s/service.yaml
-      kubectl apply -f k8s/ingress.yaml
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/ingress.yaml
 
-  - name: Update image and trigger rollout
-    run: |
-      kubectl set image deployment/nodejs-app \
-        nodejs-app=${{ needs.ci-build-push.outputs.image }}
+      - name: Update image and trigger rollout
+        run: |
+          kubectl set image deployment/nodejs-app \
+            nodejs-app=${{ needs.ci-build-push.outputs.image }}
