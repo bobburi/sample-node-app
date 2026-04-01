@@ -55,36 +55,36 @@ jobs:
 # CD STAGE
 # ======================
   cd-deploy:
-    name: CD - Deploy to GKE
-    needs: ci-build-push
-    runs-on: ubuntu-latest
+  name: CD - Deploy to GKE
+  needs: ci-build-push
+  runs-on: ubuntu-latest
 
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
+  steps:
+  - name: Checkout Code
+    uses: actions/checkout@v4
 
-    - name: Authenticate to GCP
-      uses: google-github-actions/auth@v2
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }}
+  - name: Authenticate to GCP
+    uses: google-github-actions/auth@v2
+    with:
+      credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Set up gcloud
-      uses: google-github-actions/setup-gcloud@v2
+  - name: Set up gcloud
+    uses: google-github-actions/setup-gcloud@v2
 
-    # ✅ FIXED STEP (replaces gcloud get-credentials)
-    - name: Get GKE credentials
-      uses: google-github-actions/get-gke-credentials@v2
-      with:
-        cluster_name: ${{ env.GKE_CLUSTER }}
-        location: ${{ env.GKE_ZONE }}
-        project_id: ${{ env.PROJECT_ID }}
+  - name: Get GKE credentials
+    uses: google-github-actions/get-gke-credentials@v2
+    with:
+      cluster_name: ${{ env.GKE_CLUSTER }}
+      location: ${{ env.GKE_ZONE }}
+      project_id: ${{ env.PROJECT_ID }}
 
-    - name: Update Image in Deployment
-      run: |
-        sed -i "s|IMAGE_PLACEHOLDER|${{ needs.ci-build-push.outputs.image }}|g" k8s/deployment.yaml
+  - name: Deploy manifests
+    run: |
+      kubectl apply -f k8s/deployment.yaml
+      kubectl apply -f k8s/service.yaml
+      kubectl apply -f k8s/ingress.yaml
 
-    - name: Deploy to GKE
-      run: |
-        kubectl apply -f k8s/deployment.yaml
-        kubectl apply -f k8s/service.yaml
-        kubectl apply -f k8s/ingress.yaml
+  - name: Update image and trigger rollout
+    run: |
+      kubectl set image deployment/nodejs-app \
+        nodejs-app=${{ needs.ci-build-push.outputs.image }}
